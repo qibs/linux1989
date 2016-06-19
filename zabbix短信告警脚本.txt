@@ -1,0 +1,42 @@
+#! /usr/bin/python
+#coding:utf-8
+import urllib2
+import urllib
+import sys
+
+def sendm(mobile,content):
+    url = 'http://xxx/sms.aspx'
+
+    data = urllib.urlencode({
+        "userid":'xx',
+        "account":'xx',
+        "password":'xxx',
+        "mobile":mobile,
+        "content":content,
+        "sendTime":"",
+        "action":"send",
+        "extno":""})
+    req = urllib2.Request(url,data)
+    res = urllib2.urlopen(req)
+    print res.read()    
+
+number=sys.argv[1]
+msg=sys.argv[2]
+sendm(number,msg)
+
+
+6.触发事件，测试能否收到告警短信。
+
+6.1调试的时候，可修改zabbix_server.conf的debuglevel=4,重启zabbix_server使配置生效。
+
+6.2抓取日志信息，对排错很关键。默认日志位置：/tmp/zabbix_server.log
+
+
+
+
+zabbix 监控activemq
+http://www.it165.net/admin/html/201605/7665.html
+http://www.itnpc.com/news/web/146338368367277.html
+
+zabbix监控memcached 
+http://www.fwqtg.net/zabbixmemcache.html
