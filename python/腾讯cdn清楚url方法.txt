@@ -1,0 +1,2 @@
+python txcdnurl.py RefreshCdnUrl -u xxxxx -p xxxxxxx --urls http://xxxxxxxtang.sp.oa.com/test.php --urls http://xxxxxxxtang.sp.oa.com/test1.php
+python txcdnurl.py RefreshCdnUrl -u xxxxx -p xxxxxxx --dirs-from "c:\XXX.txt"

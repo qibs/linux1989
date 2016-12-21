@@ -1,0 +1,4 @@
+运行环境：python2.7
+需要模块：flask,paramiko
+配置文件需要和程序在同一级目录下，配置文件名称必须：pub.conf
+最好用nohup方式运行

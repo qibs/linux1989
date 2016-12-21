@@ -1,0 +1,25 @@
++ echo ''
++ array=(192.168.187.183:01 192.168.187.185:02 192.168.187.188:03)
++ declare -a array
+++ /sbin/ifconfig bond0
+++ awk -F: '/inet addr/{split($2,a," "); print a[1]}'
++ ip=192.168.187.183
++ for i in '${array[@]}'
++ echo 192.168.187.183:01
++ grep 192.168.187.183
+192.168.187.183:01
++ '[' 0 = 0 ']'
+++ echo 192.168.187.183:01
+++ awk -F: '/192.168.187.183:01/{print $2}'
++ server_num=01
++ for i in '${array[@]}'
++ echo 192.168.187.185:02
++ grep 192.168.187.183
++ '[' 1 = 0 ']'
++ for i in '${array[@]}'
++ echo 192.168.187.188:03
++ grep 192.168.187.183
++ '[' 1 = 0 ']'
++ dir=/data/vod_cut/tmp/01
+++ find /data/vod_cut/tmp/01 -type d -ctime 1 -depth -maxdepth 1
++ b=

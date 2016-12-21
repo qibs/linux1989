@@ -1,0 +1,235 @@
+#-*- encoding: utf-8 -*-
+
+import os
+import sys
+import traceback
+import time
+
+import psutil
+
+import config
+from helper import date_helper, http_helper, str_helper, log_helper, sys_helper
+
+
+def logger(log):
+    log_helper.get_logger(config.log_file).info(log)
+
+def logger_error(log):
+    log_helper.get_logger(config.log_file).error(log)
+
+def mkdirs(path, isFolder):
+    if isFolder:
+        fPath = path
+    else:
+        fPath = os.path.dirname(path)
+    # print os.path.exists(fPath)
+    if not os.path.exists(fPath):
+        # print 'create:' + fPath
+        os.makedirs(fPath)
+
+def get_task(serverCode):
+    url = config.task_get_url
+    params = {
+        'serverCode' : serverCode,
+        'time' : date_helper.get_now_datetimestr3(),
+    }
+
+    re = http_helper.get(url, params = params)
+    if 200 == re.status_code:
+        re.encoding = 'utf-8'
+        log = 'get_task_url:%s;result:%s' % (re.url, re.text)
+        logger(log)
+        return str_helper.json_decode(re.text)
+
+    log = 'get_task_url:%s;resultcode:%d' % (re.url, re.status_code)
+    logger(log)
+    return None
+
+
+def push_task(serverCode, taskId, vId, status, process, desc):
+    url = config.task_push_url
+    params = {
+        'serverCode' : serverCode,
+        'time' : date_helper.get_now_datetimestr3(),
+        'taskId' : taskId,
+        'vId' : vId,
+        'status' : status,
+        'process' : process,
+        'desc' : desc,
+    }
+
+    re = http_helper.get(url, params = params)
+    if 200 == re.status_code:
+        re.encoding = 'utf-8'
+        log = 'push_task_url:%s;result:%s' % (re.url, re.text)
+        logger(log)
+        return str_helper.json_decode(re.text)
+
+    log = 'put_task_url:%s;resultcode:%s' % (re.url, re.status_code)
+    logger(log)
+    return None
+
+
+def stop_cut(sign, pid):
+    '''
+        停止录制任务
+    '''    
+    if psutil.pid_exists(pid):
+        psutil.Process(pid).kill()
+        logger('kill_cut_over'+str(pid))
+    else:
+        logger('kill_cut_not_exist'+str(pid))
+
+
+def write_file(filePath, content, method = 'w'):    
+    fh = open(filePath, method)
+    try:
+        fh.write(content)
+    except:
+        logger_error(traceback.format_exc())
+    finally:
+        fh.close()
+
+
+def start_cut(cuttask):
+    taskId = cuttask['taskId']
+    vId = cuttask['vId']
+    if str_helper.is_null_or_empty(vId):
+        vId = '0'
+    md5 = cuttask['md5']
+    vPath = cuttask['vPath']
+    storeType = str(cuttask['storeType'])
+    transCount = cuttask['transCount']
+    tsTime = cuttask['tsTime']
+
+    videoPath = config.store_path[storeType] + vPath
+
+    serverPath = os.path.join(config.cut_temp_path, config.server_code)
+    basePath = os.path.join(serverPath, taskId)
+    if not os.path.exists(basePath):
+        os.makedirs(basePath)
+
+    fileNamePre = os.path.basename(vPath)
+
+    fileName = fileNamePre[0:fileNamePre.find('.')]
+    cutPath = os.path.join(basePath, fileName)
+    if not os.path.exists(cutPath):
+        os.makedirs(cutPath)
+
+
+    filePath = os.path.join(cutPath, fileNamePre + '.m3u8')
+
+    info = '%s\t%s\t%s\t%s\t%s' % (vId, taskId, fileName, filePath.replace(serverPath, ''), vPath)
+    cutInfoPath = os.path.join(basePath, config.cut_info_txt)
+    write_file(cutInfoPath, info, 'w')
+
+    desc = '____%(vId)s___%(taskId)s___%(name)s___%(time)s____' % {'vId': vId, 'taskId': taskId, 'name':fileName, 'time': date_helper.get_now_datetimestr3()}
+    cmd = '%(bin)s -desc "%(desc)s" -i "%(source)s" -log_path %(logPath)s -task_id %(taskId)s -d %(tsTime)d -p %(p)s -u "%(path)s" ' % {'taskId':taskId,'logPath':config.log_cut_path+'/', 'desc': desc, 'bin':config.cut_bin_path, 'source':videoPath, 'tsTime':tsTime, 'p': fileNamePre, 'path' : cutPath}
+    logPath = '%s%scut_%s.log' % (config.log_cut_path, os.sep, taskId)
+
+    shell = '''#!/bin/bash 
+nohup %(cmd)s >> %(logPath)s &
+sleep 3s
+echo $!''' % {'cmd':cmd, 'logPath':logPath}
+
+    logger('shellcmd:'+shell)
+    
+    re = os.popen(shell)
+    
+    pid = re.read().strip()
+    logger('shellcmd:' + shell + ';;;result:' + pid)
+    
+    try:
+        ppid = int(pid)
+
+        cutPidPath = os.path.join(basePath, config.cut_pid_txt)
+        write_file(cutPidPath, pid, 'w')
+        return ppid
+    except Exception, e:
+        return None
+
+
+def run_task(task):
+    if None == task or 0 != task['code'] or None == task.get('info', None) or None == task['info'].get('isTask', None) or 1 != task['info']['isTask'] or None == task['info'].get('task',None):
+        return
+
+    cuttask = task['info']['task']
+
+    taskId = cuttask['taskId']
+    vId = cuttask.get('vId', '')
+    vPath = cuttask['vPath']
+    md5 = cuttask['md5']
+    storeType = str(cuttask['storeType'])
+    tsTime = cuttask['tsTime']
+
+    if not os.path.exists(config.cut_test_file):
+        push_task(serverCode = config.server_code, taskId = taskId, vId = vId, status = 2, process = '', desc = 'not access storage')
+        return
+    if None == config.store_path.get(storeType, None):
+        push_task(serverCode = config.server_code, taskId = taskId, vId = vId, status = 4, process = '', desc = 'storeType error')
+        return
+    videoPath = config.store_path[storeType] + vPath
+
+    if not os.path.isfile(videoPath):
+        push_task(serverCode = config.server_code, taskId = taskId, vId = vId, status = 3, process = '', desc = 'not access video')
+        return
+
+    try:
+        pid = start_cut(cuttask)
+        # if None != pid and not psutil.pid_exists(pid):
+        #     pid = None
+    except Exception, e:
+        pid = None
+        logger_error(traceback.format_exc())
+
+    if None == pid:
+        status = 3
+        pid = ''
+        desc = 'start fail.'
+    else:
+        status = 1
+        desc = 'ok'
+
+    # status = 1
+
+    result = push_task(serverCode = config.server_code, taskId = taskId, vId = vId, status = status, process = pid, desc = desc)
+    if None == result:
+        return
+
+    if 0 == result.get('code', None) and None != result.get('info', None) and 1 == result['info'].get('isStop', None):
+        #停止任务
+        stop_cut(code, pid)
+    else:
+        return
+
+
+
+
+
+
+def run():
+    logger('start_cut start....')
+    while True:
+        task = None
+        try:
+            task = get_task(config.server_code)
+            run_task(task)
+        except Exception, e:
+            logger(traceback.format_exc())
+
+        logger('start_cut sleep....')
+        time.sleep(config.task_interval)
+
+        pass
+
+
+if __name__ == '__main__':
+    mkdirs(config.log_cut_path, True)
+    if len(sys.argv) > 1:
+        if 'test' == sys.argv[1]:
+            print sys_helper.get_local_ip()
+
+        sys.exit(0)
+    
+    run()
+    
